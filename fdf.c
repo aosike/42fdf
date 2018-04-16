@@ -6,7 +6,7 @@
 /*   By: agundry <marvin@42.fr>                     +#+  +:+       +#+        */
 /*                                                +#+#+#+#+#+   +#+           */
 /*   Created: 2018/03/26 13:07:18 by agundry           #+#    #+#             */
-/*   Updated: 2018/03/30 13:55:27 by agundry          ###   ########.fr       */
+/*   Updated: 2018/04/16 14:13:10 by agundry          ###   ########.fr       */
 /*                                                                            */
 /* ************************************************************************** */
 
@@ -27,6 +27,7 @@ int	verify_map(t_fdf *fdf) //check file existence, etc.
 	while (get_next_line(fdf->fd, &line))
 	{
 		fdf->in = ft_strjoin(fdf->in, line);
+		fdf->in = ft_strjoin(fdf->in, "\n");
 		while (i < ft_strlen(line))
 		{
 			if (ft_isdigit(line[i]) && ++lsiz)
@@ -44,7 +45,6 @@ int	verify_map(t_fdf *fdf) //check file existence, etc.
 		lsiz = 0;
 		i = 0;
 	}
-	//fdf->in = ft_strjoin(fdf->in, "\0");
 	return (1);
 }
 
@@ -52,15 +52,13 @@ int	get_map(t_fdf *fdf)
 {
 	char	*c;
 	char	*num;
-	t_pt	*m;
-	int		y;
+	int		*m;
 
-	y = 0;
-	if (!(verify_map(fdf)) || !(fdf->map = (t_pt*)malloc((sizeof(t_pt) * fdf->msiz)))) /////
+	if (!(verify_map(fdf)) || !(fdf->map = (int*)malloc((sizeof(int) * fdf->msiz)))) /////
 		return (-1);
-	c = fdf->in;////
+	c = fdf->in;
 	m = fdf->map;
-	while (*c) // - fdf->in < (long)fdf->msiz)
+	while (*c)
 	{
 		if (ft_isdigit(*c))
 		{
@@ -68,12 +66,8 @@ int	get_map(t_fdf *fdf)
 				return (-1);
 			while (ft_isdigit(*c))
 				num = ft_strjoin(num, c++);
-			m->z = ft_atoi(num);
-			m->x = (y % fdf->w);
-			m->y = (y / fdf->w);
-//			printf("%d,%d,%d\n", m->x, m->y, m->z);
+			*m = ft_atoi(num);
 			++m;
-			++y;
 			free(num);
 		}
 		++c;
@@ -83,30 +77,83 @@ int	get_map(t_fdf *fdf)
 
 int	drawpts(t_fdf *fdf)
 {
-	t_pt	*map;
+	int		*m;
 	size_t	s;
-	int		xmod;
-	int		ymod;
 
-	map = fdf->map;
+	m = fdf->map;
 	s = 0;
+	if (!(fdf->pts = (t_pt*)malloc(sizeof(t_pt) * fdf->msiz)))
+		return (-1);
 	while (s < fdf->msiz)
 	{
-		printf("%d,%d,%d\n", map->x, map->y, map->z);
-		xmod = (s % fdf->w) * 5; //replace 5 with scale factor var
-		ymod = (s / fdf->w) * 5;
-		mlx_pixel_put(fdf->mlx, fdf->win, map->x + xmod, map->y + ymod, 0xFFFFFF);
+		fdf->xmod = 10 + (s % fdf->w) * 20; //replace 5 with scale factor var //macro?!?! //expensive!!!
+		fdf->ymod = 10 + (s / fdf->w) * 20; //refactor these
+		mlx_pixel_put(fdf->mlx, fdf->win, fdf->pts[s].x, fdf->pts[s].y, 0xFFFFFF + (50 * m[s]));
 		++s;
-		++map;
 	}
 	return (1);
 }
 
+void	midpoint(t_pt *p1, t_pt *p2, t_fdf *fdf) //modify to take in two endpoint strux and fdf struk
+{
+	int	d;
+	int	x;
+	int	y;
+	int	dx;
+	int	dy;
+
+	dx = p2->x - p1->x;
+	dy = p2->y - p1->y;
+	d = dy - (dx / 2);
+	x = p1->x;
+	y = p1->y;
+	while (x++ < p2->x) //consider scaling, might be a good time to redefine pts
+		//
+	{
+		d += (d < 0) ? (d + dy) : (dy - dx);
+		y += (d < 0) ? 0 : 1;
+		mlx_pixel_put(fdf->mlx, fdf->win, (x * 20), (y * 20), 0xFFFFFF + (50 * p1->z));
+	}
+}
+
 int drawlines(t_fdf *fdf)
 {
-	t_fdf *dfd;
-   
-	dfd	= fdf;
+	int		*map;
+	size_t	s;
+	t_pt	p1;
+	t_pt	p2;
+
+	s = 0;
+	map = fdf->map;
+	while (s < fdf->msiz)
+	{
+		//load p1
+		p1.x = s % fdf->w;
+		p1.y = s / fdf->w;
+		p1.z = map[s];
+		//make fxn to load p2? do here before each if or within?
+		p2.x = (s - fdf->w) % fdf->w;
+		p2.y = (s - fdf->w) / fdf->w;
+		p2.z = map[s - fdf->w];
+		if (map[s - fdf->w])
+			midpoint(&p1, &p2, fdf);
+		p2.x = (s - 1) % fdf->w;
+		p2.y = (s - 1) / fdf->w;
+		p2.z = map[s - 1];
+		if (map[s - 1])
+			midpoint(&p1, &p2, fdf);
+		p2.x = (s + 1) % fdf->w;
+		p2.y = (s + 1) / fdf->w;
+		p2.z = map[s + 1];
+		if (map[s + 1])
+			midpoint(&p1, &p2, fdf);
+		p2.x = (s + fdf->w) % fdf->w;
+		p2.y = (s + fdf->w) / fdf->w;
+		p2.z = map[s + fdf->w];
+		if (map[s + fdf->w])
+			midpoint(&p1, &p2, fdf);
+		s++;
+	}
 	return (1);
 }
 
@@ -126,7 +173,7 @@ int	main(int ac, char **av)
 			|| !(get_map(&fdf))) /////
 		return (0);
 	fdf.mlx = mlx_init();
-	fdf.win = mlx_new_window(fdf.mlx, 500, 500, "dad");//
+	fdf.win = mlx_new_window(fdf.mlx, 1000, 1000, "dad");//
 //	mlx_loop(fdf.mlx);
 //	mlx_loop_hook(fdf.mlx, (&fdf_draw)(&fdf));
 	//open map
